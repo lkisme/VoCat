@@ -226,7 +226,7 @@ func (manager *Manager) ReadSMS(
 	id string,
 	index int,
 ) (SMSMessage, error) {
-	if index <= 0 {
+	if index < 0 {
 		return SMSMessage{}, ErrSMSInvalidMessageIndex
 	}
 	state, err := manager.lookup(id)
@@ -278,7 +278,7 @@ func (manager *Manager) DeleteSMSFromStorage(
 	storage string,
 	index int,
 ) error {
-	if index <= 0 {
+	if index < 0 {
 		return ErrSMSInvalidMessageIndex
 	}
 	storage = strings.ToUpper(strings.TrimSpace(storage))
@@ -406,7 +406,7 @@ func parseCMGLHeader(line string) smsRecordHeader {
 	}
 	var ok bool
 	header.index, ok = parseDecimal(values[0])
-	if !ok || header.index <= 0 {
+	if !ok || header.index < 0 {
 		header.err = errors.New("invalid CMGL message index")
 	}
 	header.status = parseSMSStorageStatus(values[1])

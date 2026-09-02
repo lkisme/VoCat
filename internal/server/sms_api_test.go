@@ -158,6 +158,46 @@ func TestSyncModemSMSDoesNotRelabelStoredMessageAfterProfileSwitch(t *testing.T)
 	}
 }
 
+func TestSyncModemSMSDoesNotDuplicateZeroIndexMessage(t *testing.T) {
+	ctx := context.Background()
+	database, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	const (
+		deviceID = "ec20-1"
+		imei     = "867394042309830"
+	)
+	if err := database.UpsertDevice(ctx, store.Device{
+		ID: deviceID, Name: "EC20", DeviceType: store.DeviceTypePCIeEC20EC25,
+		ModemIMEI: imei, SMSEnabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	receivedAt := time.Unix(1_700_000_000, 0).UTC()
+	message := device.SMSMessage{
+		Index: 0, Storage: "ME", StorageStatus: device.SMSStatusReceivedUnread,
+		Direction: device.SMSDirectionReceived, From: "JETPAC", Text: "hello",
+		ServiceCenterTimestamp: &receivedAt, RawPDU: "001122334455",
+	}
+	server := &Server{
+		store:  database,
+		logger: regionTestLogger(),
+		devices: fakeDeviceController{entry: device.Device{
+			ID: deviceID, Discovered: true,
+			Snapshot: &device.Snapshot{DeviceID: deviceID, IMEI: imei, IMSI: "23433"},
+		}, smsMessages: []device.SMSMessage{message}},
+	}
+
+	server.syncModemSMS(ctx, deviceID)
+	server.syncModemSMS(ctx, deviceID)
+	stored, err := database.ListSMSMessages(ctx, store.SMSFilter{DeviceID: deviceID})
+	if err != nil || len(stored) != 1 || stored[0].Body != "hello" {
+		t.Fatalf("stored messages after repeated scan = %#v, %v", stored, err)
+	}
+}
+
 func TestSMSThreadConfiguredDeviceUsesStableIMEI(t *testing.T) {
 	ctx := context.Background()
 	database, err := store.Open(ctx, ":memory:")

@@ -326,6 +326,25 @@ func TestManagerListReadAndDeleteSMS(t *testing.T) {
 	client.assertDone(t)
 }
 
+func TestManagerReadAndDeleteSMSAllowZeroIndex(t *testing.T) {
+	const gsmPDU = "000405912143F500004210203040500005C82293F904"
+	client := &transcriptClient{steps: []clientStep{
+		{command: "AT+CMGF=0", response: okResponse()},
+		{command: "AT+CMGR=0", response: okResponse("+CMGR: 1,,23", gsmPDU)},
+		{command: "AT+CMGD=0", response: okResponse()},
+	}}
+	manager, id := newStartedTestManager(t, client)
+
+	message, err := manager.ReadSMS(context.Background(), id, 0)
+	if err != nil || message.Index != 0 || message.Text != "HELLO" {
+		t.Fatalf("ReadSMS = %#v, %v", message, err)
+	}
+	if err := manager.DeleteSMS(context.Background(), id, 0); err != nil {
+		t.Fatalf("DeleteSMS: %v", err)
+	}
+	client.assertDone(t)
+}
+
 func TestManagerDeleteSMSFromStorageSelectsStorageAtomically(t *testing.T) {
 	client := &transcriptClient{steps: []clientStep{
 		{command: `AT+CPMS="SM"`, response: okResponse()},
