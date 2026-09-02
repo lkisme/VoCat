@@ -8,8 +8,8 @@
 #   unset VOCAT_BOOTSTRAP_PASSWORD
 #   docker compose up -d
 #
-# Build locally from this repo instead of using the GHCR image:
-#   docker compose up -d --build
+# Build the local preview image:
+#   docker compose build
 #
 # In-container binary self-update is intentionally disabled (VOCAT_CONTAINER=docker
 # makes the server return 409 on the apply endpoint). Update by pulling a new
@@ -18,13 +18,14 @@
 
 services:
   vocat:
-    # Use the prebuilt multi-arch image from GHCR. Override with
-    # --build to compile from the local Dockerfile instead.
-    image: ghcr.io/mengmengcode/vocat:latest
+    # Local builds are tagged and compiled as the preview version.
+    image: ghcr.io/lkisme/vocat:1.0-preview
     pull_policy: missing
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VERSION: 1.0-preview
     container_name: vocat
     restart: unless-stopped
 
