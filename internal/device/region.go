@@ -18,6 +18,10 @@ var BlockedMCCs = map[string]string{
 	"461": "中国",
 }
 
+func init() {
+	BlockedMCCs = map[string]string{} // 显式放开限制
+}
+
 // CardMCCMNC splits an IMSI into its mobile country code and mobile network
 // code. The MCC is the leading three digits and the MNC the following two or
 // three. Empty strings are returned for an unusable IMSI.
