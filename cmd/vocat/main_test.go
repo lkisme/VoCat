@@ -101,12 +101,8 @@ func regionTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func TestEnforceCardRegionForcesAirplaneAndPersistsPolicy(t *testing.T) {
-	client := &fakeModemClient{steps: []fakeStep{
-		{command: "AT+CFUN?", lines: []string{"+CFUN: 1"}},
-		{command: "AT+CFUN=4"},
-		{command: "AT+CFUN?", lines: []string{"+CFUN: 4"}},
-	}}
+func TestEnforceCardRegionLeavesChineseSIMAlone(t *testing.T) {
+	client := &fakeModemClient{}
 	manager := newRegionTestManager(t, client)
 	database := newRegionTestStore(t)
 
@@ -119,19 +115,12 @@ func TestEnforceCardRegionForcesAirplaneAndPersistsPolicy(t *testing.T) {
 	enforceCardRegion(context.Background(), regionTestLogger(), database, manager, regionTestDeviceID, snapshot)
 	client.assertExhausted(t)
 
-	policy, err := database.CardPolicy(context.Background(), snapshot.ICCID)
-	if err != nil {
-		t.Fatalf("CardPolicy: %v", err)
-	}
-	if policy.Source != cardPolicySourceRegionBlock {
-		t.Fatalf("policy source = %q, want %q", policy.Source, cardPolicySourceRegionBlock)
-	}
-	if policy.NetworkEnabled || policy.VoWiFiEnabled || !policy.AirplaneEnabled {
-		t.Fatalf("policy switches = %#v, want all service off and airplane on", policy)
+	if _, err := database.CardPolicy(context.Background(), snapshot.ICCID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("Chinese SIM must not receive a region-block policy, got err=%v", err)
 	}
 }
 
-func TestEnforceCardRegionSkipsRadioWhenAlreadyOff(t *testing.T) {
+func TestEnforceCardRegionLeavesChineseSIMAloneWhenRadioIsOff(t *testing.T) {
 	client := &fakeModemClient{}
 	manager := newRegionTestManager(t, client)
 	database := newRegionTestStore(t)
@@ -146,8 +135,8 @@ func TestEnforceCardRegionSkipsRadioWhenAlreadyOff(t *testing.T) {
 	enforceCardRegion(context.Background(), regionTestLogger(), database, manager, regionTestDeviceID, snapshot)
 	client.assertExhausted(t)
 
-	if _, err := database.CardPolicy(context.Background(), snapshot.ICCID); err != nil {
-		t.Fatalf("expected a persisted block policy even with the radio already off: %v", err)
+	if _, err := database.CardPolicy(context.Background(), snapshot.ICCID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("Chinese SIM must not receive a region-block policy, got err=%v", err)
 	}
 }
 

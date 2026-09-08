@@ -152,17 +152,17 @@ func blockedRegionServer(t *testing.T, imsi string) *Server {
 	}
 }
 
-func TestModemSummaryRegionFields(t *testing.T) {
+func TestModemSummaryRegionFieldsForAllowedChineseSIM(t *testing.T) {
 	t.Parallel()
-	blocked := modemSummary(&device.Snapshot{IMSI: "460001234567890"}, "", "")
-	if blocked["service_blocked"] != true {
-		t.Fatalf("service_blocked = %v, want true", blocked["service_blocked"])
+	chinese := modemSummary(&device.Snapshot{IMSI: "460001234567890"}, "", "")
+	if chinese["service_blocked"] != false {
+		t.Fatalf("service_blocked = %v, want false", chinese["service_blocked"])
 	}
-	if blocked["card_mcc"] != "460" || blocked["card_country"] != "中国" {
-		t.Fatalf("card_mcc=%v card_country=%v", blocked["card_mcc"], blocked["card_country"])
+	if chinese["card_mcc"] != "460" || chinese["card_country"] != "中国" {
+		t.Fatalf("card_mcc=%v card_country=%v", chinese["card_mcc"], chinese["card_country"])
 	}
-	if reason, _ := blocked["blocked_reason"].(string); reason == "" {
-		t.Fatal("blocked_reason must be set for a blocked card")
+	if chinese["blocked_reason"] != "" {
+		t.Fatalf("blocked_reason = %v, want empty", chinese["blocked_reason"])
 	}
 
 	allowed := modemSummary(&device.Snapshot{IMSI: "310260123456789"}, "", "")
@@ -214,8 +214,11 @@ func TestCountryNameForMCC(t *testing.T) {
 	}
 }
 
-func TestHandleVoWiFiEnabledBlockedRegion(t *testing.T) {
+func TestHandleVoWiFiEnabledAllowsChineseSIM(t *testing.T) {
 	server := blockedRegionServer(t, "460001234567890")
+	if err := server.store.UpsertDevice(context.Background(), store.Device{ID: "dev1", Name: "EC20"}); err != nil {
+		t.Fatalf("seed device: %v", err)
+	}
 	request := httptest.NewRequest(http.MethodPatch, "/devices/dev1/vowifi", strings.NewReader(`{"enabled":true}`))
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -224,19 +227,8 @@ func TestHandleVoWiFiEnabledBlockedRegion(t *testing.T) {
 	if handled := server.handleVoWiFiEnabled(recorder, request, config, true); !handled {
 		t.Fatal("handler did not claim the request")
 	}
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", recorder.Code)
-	}
-	var envelope errorEnvelope
-	if err := json.NewDecoder(recorder.Body).Decode(&envelope); err != nil {
-		t.Fatal(err)
-	}
-	if envelope.Error.Code != "region_blocked" {
-		t.Fatalf("error code = %q, want region_blocked", envelope.Error.Code)
-	}
-	// The block must happen before any state change is persisted.
-	if _, err := server.store.Device(context.Background(), "dev1"); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("device config must not be written for a blocked region, err=%v", err)
+	if recorder.Code == http.StatusForbidden {
+		t.Fatalf("Chinese SIM must not be blocked, got 403: %s", recorder.Body.String())
 	}
 }
 
